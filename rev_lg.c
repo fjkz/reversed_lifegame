@@ -11,30 +11,30 @@
 #define NUM_CANDIDATES_9CELLS_DEAD  372 // 2^9 - 136
 
 // List of the previous 3x3 cells paterns for each center cell state.
-static int **prev9cells_alive;
-static int **prev9cells_dead;
+static char **prev9cells_alive;
+static char **prev9cells_dead;
 
 // Initialize 3x3 cell paterns.
 void initialize()
 {
     // Memory allocation for 2D array.
-    prev9cells_alive = (int **)malloc(
-            sizeof(int *) * NUM_CANDIDATES_9CELLS_ALIVE);
+    prev9cells_alive = (char **)malloc(
+            sizeof(char *) * NUM_CANDIDATES_9CELLS_ALIVE);
     for (int i = 0; i < NUM_CANDIDATES_9CELLS_ALIVE; i++)
-        prev9cells_alive[i] = (int *)malloc(sizeof(int)*9);
+        prev9cells_alive[i] = (char *)malloc(sizeof(char) * 9);
 
-    prev9cells_dead = (int **)malloc(
-            sizeof(int *) * NUM_CANDIDATES_9CELLS_DEAD);
+    prev9cells_dead = (char **)malloc(
+            sizeof(char *) * NUM_CANDIDATES_9CELLS_DEAD);
     for (int i = 0; i < NUM_CANDIDATES_9CELLS_DEAD; i++)
-        prev9cells_dead[i] = (int *)malloc(sizeof(int)*9);
+        prev9cells_dead[i] = (char *)malloc(sizeof(char) * 9);
     
     int na = 0;
     int nd = 0;
 
     // Check next center cell state for each 3x3 cells.
     for (int i = 0; i < 512 /* = 2^9 */; i++) {
-        int c[9];
-        int sum = 0;
+        char c[9];
+        char sum = 0;
         for (int j = 0; j < 9; j++) {
             // Get the j-th bit in i.
             c[j] = (i >> (8 - j)) & 1;
@@ -59,7 +59,7 @@ void initialize()
     assert(nd == NUM_CANDIDATES_9CELLS_DEAD);
 }
 
-void print_field(int *field, int nx, int ny)
+void print_field(char *field, int nx, int ny)
 {
     for (int j = 0; j < ny; j++) {
         for (int i = 0; i < nx; i++) {
@@ -97,8 +97,8 @@ int correct_xy(int x, int nx)
 #define UNMACHED 1
 
 // Check the field is mathed to given 3x3 cells pattern.
-int match9cells(const int *field, int nx, int ny,
-                const int *cells, int pos)
+int match9cells(const char *field, int nx, int ny,
+                const char *cells, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
@@ -123,8 +123,8 @@ int match9cells(const int *field, int nx, int ny,
 }
 
 // Overwrite the field with the given 3x3 cells pattern.
-int *overwrite9cells(int *field, int nx, int ny,
-                     const int *cells, int pos)
+char *overwrite9cells(char *field, int nx, int ny,
+                      const char *cells, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
@@ -144,15 +144,15 @@ int *overwrite9cells(int *field, int nx, int ny,
 }
 
 // Find previos cells recursively.
-static int *_prev_field(const int *field, int nx, int ny,
-                        int *p_field, int pos)
+static char *_prev_field(const char *field, int nx, int ny,
+                         char *p_field, int pos)
 {
     // The search is succeed if all the cells are covered.
     if (pos >= nx*ny)
         return p_field;
 
     int c = field[pos];
-    int **prev9cells = (c == ALIVE) ? prev9cells_alive : prev9cells_dead;
+    char **prev9cells = (c == ALIVE) ? prev9cells_alive : prev9cells_dead;
     int num_cand = (c == ALIVE) ? NUM_CANDIDATES_9CELLS_ALIVE
                                 : NUM_CANDIDATES_9CELLS_DEAD;
 
@@ -165,8 +165,8 @@ static int *_prev_field(const int *field, int nx, int ny,
             continue;
 
         // Copy of the previous field candidate.
-        int *p_field_ = (int *)malloc(sizeof(int)*nx*ny);
-        memcpy(p_field_, p_field, sizeof(int)*nx*ny);
+        char *p_field_ = (char *)malloc(sizeof(char) * nx * ny);
+        memcpy(p_field_, p_field, sizeof(char) * nx * ny);
 
         p_field_ = overwrite9cells(p_field_, nx, ny, prev9cells[i], pos); 
 
@@ -191,9 +191,9 @@ static int *_prev_field(const int *field, int nx, int ny,
 
 // Get a field pattern that becomes to
 // the given field pattern at the next step.
-int *prev_field(const int *field, int nx, int ny)
+char *prev_field(const char *field, int nx, int ny)
 {
-    int *p_field = (int *)malloc(sizeof(int)*nx*ny); // TODO: free
+    char *p_field = (char *)malloc(sizeof(char) * nx * ny); // TODO: free
     for (int i = 0; i < nx*ny; i++)
         p_field[i] = EMPTY;
 
@@ -203,7 +203,7 @@ int *prev_field(const int *field, int nx, int ny)
 }
 
 // TODO
-int *ansistor_field(const int *field, int nx, int ny, int num_back)
+char *ansistor_field(const char *field, int nx, int ny, int num_back)
 {
     return NULL;
 }
@@ -212,7 +212,7 @@ int main(int argc, char *argv[])
 {
     initialize();
 
-    int field[] = {
+    char field[] = {
       0, 0, 0, 0, 0, 0, 0, 0,
       0, 1, 1, 0, 0, 0, 0, 0,
       0, 0, 1, 1, 0, 0, 0, 0,
@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
       0, 0, 0, 0, 0, 0, 0, 0
       };
 
-    int *p_field = prev_field(field, 8, 8);
+    char *p_field = prev_field(field, 8, 8);
 
     if (p_field == NULL) {
         fprintf(stderr, "No previous field pattern was found.\n");
