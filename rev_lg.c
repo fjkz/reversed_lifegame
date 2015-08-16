@@ -209,6 +209,9 @@ char *_prev_field(const char *field, int nx, int ny,
         num_cand = NUM_CANDIDATES_9CELLS_DEAD;
     }
 
+    const int size_p_field = sizeof(char) * nx * ny;
+    const int pos_end = nx * ny - 1;
+
     // For all 3x3 cells pattern
     // whose center cell becomes the given field state.
     //
@@ -223,14 +226,14 @@ char *_prev_field(const char *field, int nx, int ny,
         }
 
         // Copy of the previous field candidate.
-        char *p_field_ = (char *)malloc(sizeof(char) * nx * ny);
-        memcpy(p_field_, p_field, sizeof(char) * nx * ny);
+        char *p_field_ = (char *)malloc(size_p_field);
+        memcpy(p_field_, p_field, size_p_field);
 
         p_field_ = overwrite9cells(p_field_, nx, ny, prev9cells[i], pos); 
 
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
-        if (pos == nx * ny - 1) {
+        if (pos == pos_end) {
             progress[pos] = i + 1;
             free(p_field);
             return p_field_;
