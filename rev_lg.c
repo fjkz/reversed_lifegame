@@ -20,14 +20,19 @@ void initialize()
     // Memory allocation for 2D array.
     prev9cells_alive = (char **)malloc(
             sizeof(char *) * NUM_CANDIDATES_9CELLS_ALIVE);
-    for (int i = 0; i < NUM_CANDIDATES_9CELLS_ALIVE; i++)
+
+    for (int i = 0; i < NUM_CANDIDATES_9CELLS_ALIVE; i++) {
         prev9cells_alive[i] = (char *)malloc(sizeof(char) * 9);
+    }
 
     prev9cells_dead = (char **)malloc(
             sizeof(char *) * NUM_CANDIDATES_9CELLS_DEAD);
-    for (int i = 0; i < NUM_CANDIDATES_9CELLS_DEAD; i++)
+
+    for (int i = 0; i < NUM_CANDIDATES_9CELLS_DEAD; i++) {
         prev9cells_dead[i] = (char *)malloc(sizeof(char) * 9);
-    
+    } 
+
+    // Counters for each state.
     int na = 0;
     int nd = 0;
 
@@ -35,22 +40,25 @@ void initialize()
     for (int i = 0; i < 512 /* = 2^9 */; i++) {
         char c[9];
         char sum = 0;
+
         for (int j = 0; j < 9; j++) {
             // Get the j-th bit in i.
-            c[j] = (i >> (8 - j)) & 1;
+            c[j] = (i >> j) & 1;
             sum += c[j];
         }
 
         // The next cell is alive.
         if (sum == 3 || (sum == 4 && c[4] == ALIVE)) {
-            for (int j = 0; j < 9; j++)
+            for (int j = 0; j < 9; j++) {
                 prev9cells_alive[na][j] = c[j];
+            }
             na++;
 
         // The next cell is dead.
         } else {
-            for (int j = 0; j < 9; j++)
+            for (int j = 0; j < 9; j++) {
                 prev9cells_dead[nd][j] = c[j];
+            }
             nd++;
         }
     }
@@ -59,11 +67,17 @@ void initialize()
     assert(nd == NUM_CANDIDATES_9CELLS_DEAD);
 }
 
-void print_field(char *field, int nx, int ny)
+void print_field(const char *field, int nx, int ny)
 {
+    if (field == NULL) {
+        fprintf(stderr, "Argument field is NULL.\n");
+        return;
+    }
+
     for (int j = 0; j < ny; j++) {
         for (int i = 0; i < nx; i++) {
             char c;
+
             switch (field[i + nx * j]) {
             case ALIVE:
                 c = '*';
@@ -75,14 +89,16 @@ void print_field(char *field, int nx, int ny)
                 c = '~';
                 break;
             }
+
             printf("%c ", c);
         }
         printf("\n");
     }
+    printf("\n");
 }
 
-// Get corrected position. Assumes the field has periodic boundaries.
-int correct_xy(int x, int nx)
+// Get 1d position. Assumes the field has periodic boundaries.
+int get_pos(int x, int y, int nx, int ny)
 {
     if (x >= nx) {
         x = x % nx;
@@ -90,7 +106,13 @@ int correct_xy(int x, int nx)
         x = x + nx;
     }
 
-    return x;
+    if (y >= ny) {
+        y = y % ny;
+    } else if (y < 0) {
+        y = y + ny;
+    }
+
+    return x + nx * y;
 }
 
 #define MACHED   0
@@ -111,12 +133,10 @@ int match9cells(const char *field, int nx, int ny,
     int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
 
     for (int i = 0; i < 9; i++) {
-        int x_ = correct_xy(x + cx[i], nx);
-        int y_ = correct_xy(y + cy[i], ny);
-        int p_ = x_ + nx * y_;
-
-        if (field[p_] != EMPTY && field[p_] != cells[i])
+        int p = get_pos(x + cx[i], y + cy[i], nx, ny);
+        if (field[p] != EMPTY && field[p] != cells[i]) {
             return UNMACHED;
+        }
     }
 
     return MACHED;
@@ -133,11 +153,8 @@ char *overwrite9cells(char *field, int nx, int ny,
     int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
 
     for (int i = 0; i < 9; i++) {
-        int x_ = correct_xy(x + cx[i], nx);
-        int y_ = correct_xy(y + cy[i], ny);
-        int p_ = x_ + nx * y_;
-
-        field[p_] = cells[i];
+        int p = get_pos(x + cx[i], y + cy[i], nx, ny);
+        field[p] = cells[i];
     }
 
     return field;
@@ -145,12 +162,9 @@ char *overwrite9cells(char *field, int nx, int ny,
 
 // Find previos cells recursively.
 static char *_prev_field(const char *field, int nx, int ny,
-                         char *p_field, int pos)
+                         char *p_field, int pos,
+                         int *progress)
 {
-    // The search is succeed if all the cells are covered.
-    if (pos >= nx*ny)
-        return p_field;
-
     int c = field[pos];
     char **prev9cells = (c == ALIVE) ? prev9cells_alive : prev9cells_dead;
     int num_cand = (c == ALIVE) ? NUM_CANDIDATES_9CELLS_ALIVE
@@ -158,11 +172,13 @@ static char *_prev_field(const char *field, int nx, int ny,
 
     // For all 3x3 cells pattern
     // whose center cell becomes the given field state.
-    for (int i = 0; i < num_cand; i++) {
-       
+
+    // Restart from the remembered candidate.
+    for (int i = progress[pos]; i < num_cand; i++) {
         // Check the canditate macthes with the existed cells.
-        if (match9cells(p_field, nx, ny, prev9cells[i], pos) == UNMACHED)
+        if (match9cells(p_field, nx, ny, prev9cells[i], pos) == UNMACHED) {
             continue;
+        }
 
         // Copy of the previous field candidate.
         char *p_field_ = (char *)malloc(sizeof(char) * nx * ny);
@@ -170,21 +186,33 @@ static char *_prev_field(const char *field, int nx, int ny,
 
         p_field_ = overwrite9cells(p_field_, nx, ny, prev9cells[i], pos); 
 
+        // The search is succeed if all the cells are covered.
+        // Search from the next candidate at the next call.
+        if (pos == nx * ny - 1) {
+            progress[pos] = i + 1;
+            free(p_field);
+            return p_field_;
+        }
+
         // Find the previous pattern for the next cell.
-        p_field_ = _prev_field(field, nx, ny, p_field_, pos+1);
+        p_field_ = _prev_field(field, nx, ny, p_field_, pos + 1, progress);
 
         // No pattern found. Try with the next candidate.
-        if (p_field_ == NULL)
+        if (p_field_ == NULL) {
             continue;
+        }
 
-        // Found!!!
-        // Return the first founded patter.
-        // TODO: Search suitable patterns successively.
+        // A suitable pattern was found.
+        // Search from the this candidate at the next call.
+        progress[pos] = i;
         free(p_field);
         return p_field_;
     }
 
     // All candidate is not suitable.
+    // Search from the first candidate at the next call
+    // because the candidate of the previous position is changed.
+    progress[pos] = 0;
     free(p_field);
     return NULL;
 }
@@ -194,10 +222,25 @@ static char *_prev_field(const char *field, int nx, int ny,
 char *prev_field(const char *field, int nx, int ny)
 {
     char *p_field = (char *)malloc(sizeof(char) * nx * ny); // TODO: free
-    for (int i = 0; i < nx*ny; i++)
-        p_field[i] = EMPTY;
 
-    p_field = _prev_field(field, nx, ny, p_field, 0);
+    // Count the progress of searching.
+    int progress[nx*ny];
+    for (int i = 0; i < nx * ny; i++) {
+        progress[i] = 0;
+    }
+
+    // TODO: tempolaly. Print all pattern.
+    while (p_field != NULL) {
+        for (int i = 0; i < nx * ny; i++) {
+            p_field[i] = EMPTY;
+        }
+
+        p_field = _prev_field(field, nx, ny, p_field, 0, progress);
+
+        if (p_field != NULL) {
+            print_field(p_field, nx, ny);
+        }
+    }
 
     return p_field;
 }
@@ -213,24 +256,20 @@ int main(int argc, char *argv[])
     initialize();
 
     char field[] = {
-      0, 0, 0, 0, 0, 0, 0, 0,
-      0, 1, 1, 0, 0, 0, 0, 0,
-      0, 0, 1, 1, 0, 0, 0, 0,
-      0, 1, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0
+      0, 0, 0, 0,
+      0, 1, 1, 0,
+      0, 1, 1, 0,
+      0, 0, 0, 0,
       };
 
-    char *p_field = prev_field(field, 8, 8);
+    char *p_field = prev_field(field, 4, 4);
 
     if (p_field == NULL) {
         fprintf(stderr, "No previous field pattern was found.\n");
         return 1;
     }
 
-    print_field(p_field, 8, 8);
+    print_field(p_field, 4, 4);
 
     return 0;
 }
