@@ -98,6 +98,7 @@ void print_field(const char *field, int nx, int ny)
 }
 
 // Get 1d position. Assumes the field has periodic boundaries.
+static inline
 int get_pos(int x, int y, int nx, int ny)
 {
     if (x >= nx) {
@@ -118,19 +119,20 @@ int get_pos(int x, int y, int nx, int ny)
 #define MACHED   0
 #define UNMACHED 1
 
+//   -> x
+// | 0 1 2
+// v 3 4 5
+// y 6 7 8
+static const int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
+static const int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
+
 // Check the field is mathed to given 3x3 cells pattern.
+static inline
 int match9cells(const char *field, int nx, int ny,
                 const char *cells, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
-
-    //   -> x
-    // | 0 1 2
-    // v 3 4 5
-    // y 6 7 8
-    int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
-    int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
 
     for (int i = 0; i < 9; i++) {
         int p = get_pos(x + cx[i], y + cy[i], nx, ny);
@@ -143,14 +145,12 @@ int match9cells(const char *field, int nx, int ny,
 }
 
 // Overwrite the field with the given 3x3 cells pattern.
+static inline
 char *overwrite9cells(char *field, int nx, int ny,
                       const char *cells, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
-
-    int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
-    int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
 
     for (int i = 0; i < 9; i++) {
         int p = get_pos(x + cx[i], y + cy[i], nx, ny);
@@ -160,15 +160,26 @@ char *overwrite9cells(char *field, int nx, int ny,
     return field;
 }
 
+static int count_called = 0;
+
 // Find previos cells recursively.
 static char *_prev_field(const char *field, int nx, int ny,
                          char *p_field, int pos,
                          int *progress)
 {
-    int c = field[pos];
-    char **prev9cells = (c == ALIVE) ? prev9cells_alive : prev9cells_dead;
-    int num_cand = (c == ALIVE) ? NUM_CANDIDATES_9CELLS_ALIVE
-                                : NUM_CANDIDATES_9CELLS_DEAD;
+    count_called++;
+
+    // Select candidates with the cell state.
+    char **prev9cells;
+    int num_cand;
+
+    if (field[pos] == ALIVE) {
+        prev9cells = prev9cells_alive;
+        num_cand = NUM_CANDIDATES_9CELLS_ALIVE;
+    } else {
+        prev9cells = prev9cells_dead;
+        num_cand = NUM_CANDIDATES_9CELLS_DEAD;
+    }
 
     // For all 3x3 cells pattern
     // whose center cell becomes the given field state.
@@ -219,36 +230,53 @@ static char *_prev_field(const char *field, int nx, int ny,
 
 // Get a field pattern that becomes to
 // the given field pattern at the next step.
-char *prev_field(const char *field, int nx, int ny)
+char *prev_field(const char *field, int nx, int ny, int *progress)
 {
-    char *p_field = (char *)malloc(sizeof(char) * nx * ny); // TODO: free
+    char *p_field = (char *)malloc(sizeof(char) * nx * ny);
 
-    // Count the progress of searching.
-    int progress[nx*ny];
     for (int i = 0; i < nx * ny; i++) {
-        progress[i] = 0;
+        p_field[i] = EMPTY;
     }
 
-    // TODO: tempolaly. Print all pattern.
-    while (p_field != NULL) {
-        for (int i = 0; i < nx * ny; i++) {
-            p_field[i] = EMPTY;
-        }
-
-        p_field = _prev_field(field, nx, ny, p_field, 0, progress);
-
-        if (p_field != NULL) {
-            print_field(p_field, nx, ny);
-        }
-    }
+    p_field = _prev_field(field, nx, ny, p_field, 0, progress);
 
     return p_field;
 }
 
-// TODO
 char *ansistor_field(const char *field, int nx, int ny, int num_back)
 {
-    return NULL;
+    fprintf(stderr, "#");
+
+    // Count the progress of searching.
+    int progress[nx * ny];
+    for (int i = 0; i < nx * ny; i++) {
+        progress[i] = 0;
+    }
+
+    while (1) {
+        char *p_field = prev_field(field, nx, ny, progress);
+
+        // No suitable pattern.
+        if (p_field == NULL) {
+            fprintf(stderr, "\b");
+            return NULL;
+        }
+
+        if (num_back == 1) {
+            fprintf(stderr, "\n");
+            return p_field;
+        }
+
+        char *a_field = ansistor_field(p_field, nx, ny, num_back - 1);
+        free(p_field);
+
+        // Try the next previous field.
+        if (a_field == NULL) {
+            continue;
+        }
+
+        return a_field;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -262,7 +290,7 @@ int main(int argc, char *argv[])
       0, 0, 0, 0,
       };
 
-    char *p_field = prev_field(field, 4, 4);
+    char *p_field = ansistor_field(field, 4, 4, 5);
 
     if (p_field == NULL) {
         fprintf(stderr, "No previous field pattern was found.\n");
@@ -270,6 +298,8 @@ int main(int argc, char *argv[])
     }
 
     print_field(p_field, 4, 4);
+
+    fprintf(stderr, "<_prev_field> is called %d times.\n", count_called);
 
     return 0;
 }
