@@ -163,9 +163,10 @@ char *overwrite9cells(char *field, int nx, int ny,
 static int count_called = 0;
 
 // Find previos cells recursively.
-static char *_prev_field(const char *field, int nx, int ny,
-                         char *p_field, int pos,
-                         int *progress)
+static
+char *_prev_field(const char *field, int nx, int ny,
+                  char *p_field, int pos,
+                  int *progress)
 {
     count_called++;
 
@@ -243,6 +244,7 @@ char *prev_field(const char *field, int nx, int ny, int *progress)
     return p_field;
 }
 
+// TODO: multi thead.
 char *ansistor_field(const char *field, int nx, int ny, int num_back)
 {
     fprintf(stderr, "#");
@@ -263,7 +265,7 @@ char *ansistor_field(const char *field, int nx, int ny, int num_back)
         }
 
         if (num_back == 1) {
-            fprintf(stderr, "\n");
+            fprintf(stderr, "\n\n");
             return p_field;
         }
 
@@ -284,20 +286,21 @@ int main(int argc, char *argv[])
     initialize();
 
     char field[] = {
-      0, 0, 0, 0,
-      0, 1, 1, 0,
-      0, 1, 1, 0,
-      0, 0, 0, 0,
+      0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0,
+      0, 0, 1, 0, 0,
+      0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0,
       };
 
-    char *p_field = ansistor_field(field, 4, 4, 5);
+    char *p_field = ansistor_field(field, 5, 5, 10);
 
     if (p_field == NULL) {
         fprintf(stderr, "No previous field pattern was found.\n");
         return 1;
     }
 
-    print_field(p_field, 4, 4);
+    print_field(p_field, 5, 5);
 
     fprintf(stderr, "<_prev_field> is called %d times.\n", count_called);
 
