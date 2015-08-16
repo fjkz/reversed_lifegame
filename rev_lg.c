@@ -14,6 +14,24 @@
 static char **prev9cells_alive;
 static char **prev9cells_dead;
 
+int pop(int x)
+{
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    x = (x + (x >> 4)) & 0x0F0F0F0F;
+    x = x + (x >> 8);
+    x = x + (x >> 16);
+    return x & 0x0000003F;
+}
+
+int comp_pop(const void *a, const void *b)
+{
+    int i = *(int *)a;
+    int j = *(int *)b;
+
+    return pop(i) - pop(j); 
+}
+
 // Initialize 3x3 cell paterns.
 void initialize()
 {
@@ -32,18 +50,26 @@ void initialize()
         prev9cells_dead[i] = (char *)malloc(sizeof(char) * 9);
     } 
 
-    // Counters for each state.
+    // Counters for each state of the center cell.
     int na = 0;
     int nd = 0;
 
+    int integers[512]; /* 512 = 2^9 */
+    for (int i = 0; i < 512; i++) {
+        integers[i] = i;
+    }
+
+    // Sort with population counts.
+    qsort(integers, 512, sizeof(int), comp_pop);
+
     // Check next center cell state for each 3x3 cells.
-    for (int i = 0; i < 512 /* = 2^9 */; i++) {
+    for (int i = 0; i < 512; i++) {
         char c[9];
         char sum = 0;
 
         for (int j = 0; j < 9; j++) {
             // Get the j-th bit in i.
-            c[j] = (i >> j) & 1;
+            c[j] = (integers[i] >> j) & 1;
             sum += c[j];
         }
 
@@ -136,7 +162,8 @@ int match9cells(const char *field, int nx, int ny,
 
     for (int i = 0; i < 9; i++) {
         int p = get_pos(x + cx[i], y + cy[i], nx, ny);
-        if (field[p] != EMPTY && field[p] != cells[i]) {
+        char f = field[p];
+        if (f != EMPTY && f != cells[i]) {
             return UNMACHED;
         }
     }
@@ -184,7 +211,10 @@ char *_prev_field(const char *field, int nx, int ny,
 
     // For all 3x3 cells pattern
     // whose center cell becomes the given field state.
-
+    //
+    // Search from leaner patterns
+    // because they appear more frequently.
+    //
     // Restart from the remembered candidate.
     for (int i = progress[pos]; i < num_cand; i++) {
         // Check the canditate macthes with the existed cells.
