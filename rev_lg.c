@@ -93,6 +93,7 @@ void initialize()
     assert(nd == NUM_CANDIDATES_9CELLS_DEAD);
 }
 
+// Print field with PBM format.
 void print_field(const char *field, int nx, int ny)
 {
     if (field == NULL) {
@@ -100,27 +101,15 @@ void print_field(const char *field, int nx, int ny)
         return;
     }
 
+    printf("P1\n");
+    printf("%d %d\n", nx, ny);
+
     for (int j = 0; j < ny; j++) {
         for (int i = 0; i < nx; i++) {
-            char c;
-
-            switch (field[i + nx * j]) {
-            case ALIVE:
-                c = '*';
-                break;
-            case DEAD:
-                c = '.';
-                break;
-            default:
-                c = '~';
-                break;
-            }
-
-            printf("%c ", c);
+            printf("%d ", field[i + nx * j]);
         }
         printf("\n");
     }
-    printf("\n");
 }
 
 // Get 1d position. Assumes the field has periodic boundaries.
