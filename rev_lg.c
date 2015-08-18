@@ -24,7 +24,6 @@ static int comp_pop(const void *a, const void *b)
 {
     int i = *(int *)a;
     int j = *(int *)b;
-
     return pop(i) - pop(j); 
 }
 
@@ -78,61 +77,41 @@ void initialize()
 #define NORESULT 0x4
 
 struct field {
-    char *cell;
-    int nx;
-    int ny;
+    char *cell; // Includes edge. Edge cells are dead.
+    int nx;     // Not includes edge.
+    int ny;     // Not includes edge.
 };
 
 // Print field with PBM format.
 void print_field(struct field f)
 {
-    printf("P1\n");
-    printf("%d %d\n", f.nx, f.ny);
+    const int nx = f.nx;
+    const int ny = f.ny;
 
-    for (int j = 0; j < f.ny; j++) {
-        for (int i = 0; i < f.nx; i++) {
-            printf("%d ", f.cell[i + f.nx * j]);
+    printf("P1\n");
+    printf("%d %d\n", nx, ny);
+
+    for (int j = 1; j <= ny; j++) {
+        for (int i = 1; i <= nx; i++) {
+            printf("%d ", f.cell[i + (nx + 2) * j]);
         }
         printf("\n");
     }
 }
 
-// Get 1d position. Assumes the field has periodic boundaries.
-static inline
-int get_pos(int x, int y, int nx, int ny)
-{
-    if (x >= nx) {
-        x = x % nx;
-    } else if (x < 0) {
-        x = x + nx;
-    }
-
-    if (y >= ny) {
-        y = y % ny;
-    } else if (y < 0) {
-        y = y + ny;
-    }
-
-    return x + nx * y;
-}
-
 // Check the field is mathed to given 3x3 cells pattern.
 static inline
-int match_cell9(const char *cell, int nx, int ny,
-                int cell9, int pos)
+int match_cell9(const char *cell, int nx, int cell9, int pos)
 {
-    int x = pos % nx;
-    int y = pos / nx;
-
-    int c0 = (int) cell[get_pos(x-1, y-1, nx, ny)];
-    int c1 = (int) cell[get_pos(x  , y-1, nx, ny)];
-    int c2 = (int) cell[get_pos(x+1, y-1, nx, ny)];
-    int c3 = (int) cell[get_pos(x-1, y  , nx, ny)];
-    int c4 = (int) cell[get_pos(x  , y  , nx, ny)];
-    int c5 = (int) cell[get_pos(x+1, y  , nx, ny)];
-    int c6 = (int) cell[get_pos(x-1, y+1, nx, ny)];
-    int c7 = (int) cell[get_pos(x  , y+1, nx, ny)];
-    int c8 = (int) cell[get_pos(x+1, y+1, nx, ny)];
+    int c0 =  cell[pos - 1 - nx - 2];
+    int c1 =  cell[pos     - nx - 2];
+    int c2 =  cell[pos + 1 - nx - 2];
+    int c3 =  cell[pos - 1         ];
+    int c4 =  cell[pos             ];
+    int c5 =  cell[pos + 1         ];
+    int c6 =  cell[pos - 1 + nx + 2];
+    int c7 =  cell[pos     + nx + 2];
+    int c8 =  cell[pos + 1 + nx + 2];
 
     int empty = (c0 & 2) >> 1 |
                 (c1 & 2)      |
@@ -159,23 +138,17 @@ int match_cell9(const char *cell, int nx, int ny,
 
 // Overwrite the field with the given 3x3 cells pattern.
 static inline
-void overwrite_cell9(char *cell, int nx, int ny,
-                     int cell9, int pos)
+void overwrite_cell9(char *cell, int nx, int cell9, int pos)
 {
-    int x = pos % nx;
-    int y = pos / nx;
-
-    //   -> x
-    // | 0 1 2
-    // v 3 4 5
-    // y 6 7 8
-    static const int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
-    static const int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
-
-    for (int i = 0; i < 9; i++) {
-        int p = get_pos(x + cx[i], y + cy[i], nx, ny);
-        cell[p] = (cell9 >> i) & 1; // == 1 meas ALIVE
-    }
+    cell[pos - 1 - nx - 2] = (cell9 >> 0) & 1; // == 1 means ALIVE
+    cell[pos     - nx - 2] = (cell9 >> 1) & 1;
+    cell[pos + 1 - nx - 2] = (cell9 >> 2) & 1;
+    cell[pos - 1         ] = (cell9 >> 3) & 1;
+    cell[pos             ] = (cell9 >> 4) & 1;
+    cell[pos + 1         ] = (cell9 >> 5) & 1;
+    cell[pos - 1 + nx + 2] = (cell9 >> 6) & 1;
+    cell[pos     + nx + 2] = (cell9 >> 7) & 1;
+    cell[pos + 1 + nx + 2] = (cell9 >> 8) & 1;
 }
 
 static unsigned long count_called = 0;
@@ -200,11 +173,18 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
     const int nx = f.nx;
     const int ny = f.ny;
-    const int size_cell = sizeof(char) * nx * ny;
-    const int pos_end = nx * ny - 1;
+    const int size_cell = sizeof(char) * (nx + 2) * (ny + 2);
+    const int pos_end = (nx + 2) * (ny + 1) - 2;
+
+    int next_pos;
+    if (pos % (nx + 2) == nx) {
+        next_pos = pos + 3; // avoid edge
+    } else {
+        next_pos = pos + 1;
+    }
 
     // Copy of the previous field candidate.
-    char p_cell_cpy[nx*ny];
+    char p_cell_cpy[(nx+2)*(ny+2)];
     memcpy(p_cell_cpy, p_cell, size_cell);
 
     // For all 3x3 cells pattern
@@ -217,11 +197,11 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     for (int i = progress[pos]; i < num_cand; i++) {
 
         // Check the canditate macthes with the existed cells.
-        if (match_cell9(p_cell, nx, ny, prev_cell9[i], pos)) {
+        if (match_cell9(p_cell, nx, prev_cell9[i], pos)) {
             continue;
         }
 
-        overwrite_cell9(p_cell, nx, ny, prev_cell9[i], pos); 
+        overwrite_cell9(p_cell, nx, prev_cell9[i], pos);
 
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
@@ -231,10 +211,10 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         }
 
         // Find the previous pattern for the next cell.
-        _prev_cell(f, p_cell, pos + 1, progress);
+        _prev_cell(f, p_cell, next_pos, progress);
 
         // No pattern found. Try with the next candidate.
-        if (p_cell[0] == NORESULT) {
+        if (p_cell[0] & NORESULT) {
             // Revert p_cell
             memcpy(p_cell, p_cell_cpy, size_cell);
             continue;
@@ -250,7 +230,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     // Search from the first candidate at the next call
     // because the candidate of the previous position is changed.
     progress[pos] = 0;
-    p_cell[0] = NORESULT;
+    p_cell[0] |= NORESULT;
     return;
 }
 
@@ -258,16 +238,20 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 // the given field pattern at the next step.
 char *prev_cell(struct field f, int *progress)
 {
-    int l = f.nx * f.ny;
-    char *p_cell = (char *)malloc(sizeof(char) * l);
+    int nx = f.nx;
+    int ny = f.ny;
 
-    for (int i = 0; i < l; i++) {
-        p_cell[i] = EMPTY;
-    }
+    // Edges are DEAD
+    char *p_cell = (char *)calloc(sizeof(char), (nx + 2) * (ny + 2));
 
-    _prev_cell(f, p_cell, /* pos = */ 0 , progress);
+    for (int j = 1; j <= ny; j++)
+        for (int i = 1; i <= nx; i++) {
+            p_cell[i + (nx + 2) * j] = EMPTY;
+        }
 
-    return p_cell[0] == NORESULT ? NULL : p_cell;
+    _prev_cell(f, p_cell, /* pos = */ nx + 3 , progress);
+
+    return p_cell[0] & NORESULT ? NULL : p_cell;
 }
 
 // TODO: multi thead.
@@ -276,7 +260,7 @@ char *ansistor_field(struct field f, int back)
     fprintf(stderr, "#");
 
     // Count the progress of searching.
-    int l = f.nx * f.ny;
+    int l = (f.nx + 2) * (f.ny + 2);
     int progress[l];
     for (int i = 0; i < l; i++) {
         progress[i] = 0;
@@ -294,7 +278,7 @@ char *ansistor_field(struct field f, int back)
         }
 
         if (back == 1) {
-            fprintf(stderr, "\n\n");
+            fprintf(stderr, "\n");
             return p_cell;
         }
 
@@ -321,11 +305,13 @@ int main(int argc, char *argv[])
     char X = ALIVE;
 
     char cell[] = {
-      _,_,_,_,_,
-      _,_,_,_,_,
-      _,_,X,_,_,
-      _,_,_,_,_,
-      _,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,X,_,_,_,
+      _,_,X,X,X,_,_,
+      _,_,_,X,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
     };
 
     struct field f = {
