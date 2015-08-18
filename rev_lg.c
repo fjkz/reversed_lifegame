@@ -3,17 +3,12 @@
 #include <string.h>
 #include <assert.h>
 
-#define DEAD     0
-#define ALIVE    1
-#define EMPTY    2
-#define NORESULT 3
-
 #define NUM_CANDIDATES_CELL9_ALIVE 140 // 9C3 + 8C3
 #define NUM_CANDIDATES_CELL9_DEAD  372 // 2^9 - 136
 
 // List of the previous 3x3 cells paterns for each center cell state.
-static char **prev_cell9_alive;
-static char **prev_cell9_dead;
+static int *prev_cell9_alive;
+static int *prev_cell9_dead;
 
 static int pop(int x)
 {
@@ -37,19 +32,11 @@ static int comp_pop(const void *a, const void *b)
 void initialize()
 {
     // Memory allocation for 2D array.
-    prev_cell9_alive = (char **)malloc(
-            sizeof(char *) * NUM_CANDIDATES_CELL9_ALIVE);
+    prev_cell9_alive = (int *) malloc(
+            sizeof(int) * NUM_CANDIDATES_CELL9_ALIVE);
 
-    for (int i = 0; i < NUM_CANDIDATES_CELL9_ALIVE; i++) {
-        prev_cell9_alive[i] = (char *)malloc(sizeof(char) * 9);
-    }
-
-    prev_cell9_dead = (char **)malloc(
-            sizeof(char *) * NUM_CANDIDATES_CELL9_DEAD);
-
-    for (int i = 0; i < NUM_CANDIDATES_CELL9_DEAD; i++) {
-        prev_cell9_dead[i] = (char *)malloc(sizeof(char) * 9);
-    } 
+    prev_cell9_dead = (int *) malloc(
+            sizeof(int) * NUM_CANDIDATES_CELL9_DEAD);
 
     // Counters for each state of the center cell.
     int na = 0;
@@ -65,27 +52,18 @@ void initialize()
 
     // Check next center cell state for each 3x3 cells.
     for (int i = 0; i < 512; i++) {
-        char c[9];
-        char sum = 0;
-
-        for (int j = 0; j < 9; j++) {
-            // Get the j-th bit in i.
-            c[j] = (integers[i] >> j) & 1;
-            sum += c[j];
-        }
+        int x = integers[i];
+        int sum = pop(integers[i]);
 
         // The next cell is alive.
-        if (sum == 3 || (sum == 4 && c[4] == ALIVE)) {
-            for (int j = 0; j < 9; j++) {
-                prev_cell9_alive[na][j] = c[j];
-            }
+        if (sum == 3 || (sum == 4 &&
+                         (x >> 4) & 1)) { // bit of the center cell.
+            prev_cell9_alive[na] = x;
             na++;
 
         // The next cell is dead.
         } else {
-            for (int j = 0; j < 9; j++) {
-                prev_cell9_dead[nd][j] = c[j];
-            }
+            prev_cell9_dead[nd] = x;
             nd++;
         }
     }
@@ -93,6 +71,11 @@ void initialize()
     assert(na == NUM_CANDIDATES_CELL9_ALIVE);
     assert(nd == NUM_CANDIDATES_CELL9_DEAD);
 }
+
+#define DEAD     0x0
+#define ALIVE    0x1
+#define EMPTY    0x2
+#define NORESULT 0x4
 
 struct field {
     char *cell;
@@ -133,46 +116,65 @@ int get_pos(int x, int y, int nx, int ny)
     return x + nx * y;
 }
 
-#define MACHED   0
-#define UNMACHED 1
-
-//   -> x
-// | 0 1 2
-// v 3 4 5
-// y 6 7 8
-static const int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
-static const int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
-
 // Check the field is mathed to given 3x3 cells pattern.
 static inline
 int match_cell9(const char *cell, int nx, int ny,
-                const char *cell9, int pos)
+                int cell9, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
 
-    for (int i = 0; i < 9; i++) {
-        int p = get_pos(x + cx[i], y + cy[i], nx, ny);
-        char f = cell[p];
-        if (f != EMPTY && f != cell9[i]) {
-            return UNMACHED;
-        }
-    }
+    int c0 = (int) cell[get_pos(x-1, y-1, nx, ny)];
+    int c1 = (int) cell[get_pos(x  , y-1, nx, ny)];
+    int c2 = (int) cell[get_pos(x+1, y-1, nx, ny)];
+    int c3 = (int) cell[get_pos(x-1, y  , nx, ny)];
+    int c4 = (int) cell[get_pos(x  , y  , nx, ny)];
+    int c5 = (int) cell[get_pos(x+1, y  , nx, ny)];
+    int c6 = (int) cell[get_pos(x-1, y+1, nx, ny)];
+    int c7 = (int) cell[get_pos(x  , y+1, nx, ny)];
+    int c8 = (int) cell[get_pos(x+1, y+1, nx, ny)];
 
-    return MACHED;
+    int empty = (c0 & 2) >> 1 |
+                (c1 & 2)      |
+                (c2 & 2) << 1 |
+                (c3 & 2) << 2 |
+                (c4 & 2) << 3 |
+                (c5 & 2) << 4 |
+                (c6 & 2) << 5 |
+                (c7 & 2) << 6 |
+                (c8 & 2) << 7;
+
+    int alive = (c0 & 1)      |
+                (c1 & 1) << 1 |
+                (c2 & 1) << 2 |
+                (c3 & 1) << 3 |
+                (c4 & 1) << 4 |
+                (c5 & 1) << 5 |
+                (c6 & 1) << 6 |
+                (c7 & 1) << 7 |
+                (c8 & 1) << 8;
+
+    return (alive ^ cell9) & ~empty; // != 0 meas unmached.
 }
 
 // Overwrite the field with the given 3x3 cells pattern.
 static inline
 void overwrite_cell9(char *cell, int nx, int ny,
-                     const char *cell9, int pos)
+                     int cell9, int pos)
 {
     int x = pos % nx;
     int y = pos / nx;
 
+    //   -> x
+    // | 0 1 2
+    // v 3 4 5
+    // y 6 7 8
+    static const int cx[9] = {-1,  0,  1, -1,  0,  1, -1,  0,  1};
+    static const int cy[9] = {-1, -1, -1,  0,  0,  0,  1,  1,  1};
+
     for (int i = 0; i < 9; i++) {
         int p = get_pos(x + cx[i], y + cy[i], nx, ny);
-        cell[p] = cell9[i];
+        cell[p] = (cell9 >> i) & 1; // == 1 meas ALIVE
     }
 }
 
@@ -185,7 +187,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     count_called++;
 
     // Select candidates with the cell state.
-    char **prev_cell9;
+    int *prev_cell9;
     int num_cand;
 
     if (f.cell[pos] == ALIVE) {
@@ -213,8 +215,9 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     //
     // Restart from the remembered candidate.
     for (int i = progress[pos]; i < num_cand; i++) {
+
         // Check the canditate macthes with the existed cells.
-        if (match_cell9(p_cell, nx, ny, prev_cell9[i], pos) == UNMACHED) {
+        if (match_cell9(p_cell, nx, ny, prev_cell9[i], pos)) {
             continue;
         }
 
@@ -314,12 +317,15 @@ int main(int argc, char *argv[])
 {
     initialize();
 
+    char _ = DEAD;
+    char X = ALIVE;
+
     char cell[] = {
-      0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0,
-      0, 0, 1, 0, 0,
-      0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0
+      _,_,_,_,_,
+      _,_,_,_,_,
+      _,_,X,_,_,
+      _,_,_,_,_,
+      _,_,_,_,_,
     };
 
     struct field f = {
