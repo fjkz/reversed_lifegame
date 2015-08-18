@@ -99,54 +99,6 @@ void print_field(struct field f)
     }
 }
 
-// Check the field is mathed to given 3x3 cells pattern.
-static inline
-int match_cell9(const char *cell, int dx, int cell9, int pos)
-{
-    int c0 =  cell[pos - 1 - dx];
-    int c1 =  cell[pos     - dx];
-    int c2 =  cell[pos + 1 - dx];
-    int c3 =  cell[pos - 1     ];
-    int c4 =  cell[pos         ];
-    int c5 =  cell[pos + 1     ];
-    int c6 =  cell[pos - 1 + dx];
-    int c7 =  cell[pos     + dx];
-    int c8 =  cell[pos + 1 + dx];
-
-    int empty = (c0 & 2) >> 1 |
-                (c1 & 2)      |
-                (c2 & 2) << 1 |
-                (c3 & 2) << 2 |
-                (c4 & 2) << 3 |
-                (c5 & 2) << 4 |
-                (c6 & 2) << 5 |
-                (c7 & 2) << 6 |
-                (c8 & 2) << 7;
-
-    int alive = (c0 & 1)      |
-                (c1 & 1) << 1 |
-                (c2 & 1) << 2 |
-                (c3 & 1) << 3 |
-                (c4 & 1) << 4 |
-                (c5 & 1) << 5 |
-                (c6 & 1) << 6 |
-                (c7 & 1) << 7 |
-                (c8 & 1) << 8;
-
-    return (alive ^ cell9) & ~empty; // != 0 meas unmached.
-}
-
-// Overwrites the field with the given 3x3 cells pattern.
-// Does not write 0~3, 6 th cells because they have already been written.
-static inline
-void overwrite_cell9(char *cell, int dx, int cell9, int pos)
-{
-    cell[pos         ] = (cell9 >> 4) & 1; // only in x = 1, y = 1
-    cell[pos + 1     ] = (cell9 >> 5) & 1; // only in y = 1
-    cell[pos     + dx] = (cell9 >> 7) & 1; // only in x = 1
-    cell[pos + 1 + dx] = (cell9 >> 8) & 1;
-}
-
 static unsigned long count_called = 0;
 
 // Find previos cells recursively.
@@ -172,6 +124,39 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     const int dx = nx + 2;
     const int pos_end = dx * (ny + 1) - 2;
 
+    // Get the 3x3 cells to be search at this turn.
+    int non_empty;
+    int alive;
+    {
+        int c0 =  p_cell[pos - 1 - dx];
+        int c1 =  p_cell[pos     - dx];
+        int c2 =  p_cell[pos + 1 - dx];
+        int c3 =  p_cell[pos - 1     ];
+        int c4 =  p_cell[pos         ];
+        int c5 =  p_cell[pos + 1     ];
+        int c6 =  p_cell[pos - 1 + dx];
+        int c7 =  p_cell[pos     + dx];
+        int c8 =  p_cell[pos + 1 + dx];
+
+        // The 0 1, 2, 3, 6 th is not empty clearly.
+        int empty = (c4 & 2) << 3 |
+                    (c5 & 2) << 4 |
+                    (c7 & 2) << 6 |
+                    (c8 & 2) << 7;
+
+        non_empty = ~empty;
+
+        alive = (c0 & 1)      |
+                (c1 & 1) << 1 |
+                (c2 & 1) << 2 |
+                (c3 & 1) << 3 |
+                (c4 & 1) << 4 |
+                (c5 & 1) << 5 |
+                (c6 & 1) << 6 |
+                (c7 & 1) << 7 |
+                (c8 & 1) << 8;
+    }
+
     // The next cell position to be searched.
     int next_pos;
     if (pos % dx == nx) {
@@ -195,13 +180,21 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     //
     // Restart from the remembered candidate.
     for (int i = progress[pos]; i < num_cand; i++) {
+        const int cell9 = prev_cell9[i];
 
         // Check the canditate macthes with the existed cells.
-        if (match_cell9(p_cell, dx, prev_cell9[i], pos)) {
+        if ((alive ^ cell9) & non_empty) {
+            // Not matched. Try the next candidate.
             continue;
         }
 
-        overwrite_cell9(p_cell, dx, prev_cell9[i], pos);
+        // Overwrites the field with the given 3x3 cells pattern.
+        // Does not write 0 1, 2, 3, 6 th cells
+        // because they have already been written.
+        p_cell[pos         ] = (cell9 >> 4) & 1; // only at x = 1, y = 1
+        p_cell[pos + 1     ] = (cell9 >> 5) & 1; // only at y = 1
+        p_cell[pos     + dx] = (cell9 >> 7) & 1; // only at x = 1
+        p_cell[pos + 1 + dx] = (cell9 >> 8) & 1;
 
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
