@@ -101,17 +101,17 @@ void print_field(struct field f)
 
 // Check the field is mathed to given 3x3 cells pattern.
 static inline
-int match_cell9(const char *cell, int nx, int cell9, int pos)
+int match_cell9(const char *cell, int dx, int cell9, int pos)
 {
-    int c0 =  cell[pos - 1 - nx - 2];
-    int c1 =  cell[pos     - nx - 2];
-    int c2 =  cell[pos + 1 - nx - 2];
-    int c3 =  cell[pos - 1         ];
-    int c4 =  cell[pos             ];
-    int c5 =  cell[pos + 1         ];
-    int c6 =  cell[pos - 1 + nx + 2];
-    int c7 =  cell[pos     + nx + 2];
-    int c8 =  cell[pos + 1 + nx + 2];
+    int c0 =  cell[pos - 1 - dx];
+    int c1 =  cell[pos     - dx];
+    int c2 =  cell[pos + 1 - dx];
+    int c3 =  cell[pos - 1     ];
+    int c4 =  cell[pos         ];
+    int c5 =  cell[pos + 1     ];
+    int c6 =  cell[pos - 1 + dx];
+    int c7 =  cell[pos     + dx];
+    int c8 =  cell[pos + 1 + dx];
 
     int empty = (c0 & 2) >> 1 |
                 (c1 & 2)      |
@@ -136,19 +136,15 @@ int match_cell9(const char *cell, int nx, int cell9, int pos)
     return (alive ^ cell9) & ~empty; // != 0 meas unmached.
 }
 
-// Overwrite the field with the given 3x3 cells pattern.
+// Overwrites the field with the given 3x3 cells pattern.
+// Does not write 0~3, 6 th cells because they have already been written.
 static inline
-void overwrite_cell9(char *cell, int nx, int cell9, int pos)
+void overwrite_cell9(char *cell, int dx, int cell9, int pos)
 {
-    cell[pos - 1 - nx - 2] = (cell9 >> 0) & 1; // == 1 means ALIVE
-    cell[pos     - nx - 2] = (cell9 >> 1) & 1;
-    cell[pos + 1 - nx - 2] = (cell9 >> 2) & 1;
-    cell[pos - 1         ] = (cell9 >> 3) & 1;
-    cell[pos             ] = (cell9 >> 4) & 1;
-    cell[pos + 1         ] = (cell9 >> 5) & 1;
-    cell[pos - 1 + nx + 2] = (cell9 >> 6) & 1;
-    cell[pos     + nx + 2] = (cell9 >> 7) & 1;
-    cell[pos + 1 + nx + 2] = (cell9 >> 8) & 1;
+    cell[pos         ] = (cell9 >> 4) & 1; // only in x = 1, y = 1
+    cell[pos + 1     ] = (cell9 >> 5) & 1; // only in y = 1
+    cell[pos     + dx] = (cell9 >> 7) & 1; // only in x = 1
+    cell[pos + 1 + dx] = (cell9 >> 8) & 1;
 }
 
 static unsigned long count_called = 0;
@@ -173,18 +169,22 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
     const int nx = f.nx;
     const int ny = f.ny;
-    const int size_cell = sizeof(char) * (nx + 2) * (ny + 2);
-    const int pos_end = (nx + 2) * (ny + 1) - 2;
+    const int dx = nx + 2;
+    const int pos_end = dx * (ny + 1) - 2;
 
+    // The next cell position to be searched.
     int next_pos;
-    if (pos % (nx + 2) == nx) {
+    if (pos % dx == nx) {
         next_pos = pos + 3; // avoid edge
     } else {
         next_pos = pos + 1;
     }
 
     // Copy of the previous field candidate.
-    char p_cell_cpy[(nx+2)*(ny+2)];
+    // If domain size is larger, stack may overflow.
+    // If so, revert only overwritten cells manulally.
+    char p_cell_cpy[dx * (ny + 2)];
+    const int size_cell = sizeof(char) * dx * (ny + 2);
     memcpy(p_cell_cpy, p_cell, size_cell);
 
     // For all 3x3 cells pattern
@@ -197,11 +197,11 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     for (int i = progress[pos]; i < num_cand; i++) {
 
         // Check the canditate macthes with the existed cells.
-        if (match_cell9(p_cell, nx, prev_cell9[i], pos)) {
+        if (match_cell9(p_cell, dx, prev_cell9[i], pos)) {
             continue;
         }
 
-        overwrite_cell9(p_cell, nx, prev_cell9[i], pos);
+        overwrite_cell9(p_cell, dx, prev_cell9[i], pos);
 
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
@@ -307,9 +307,9 @@ int main(int argc, char *argv[])
     char cell[] = {
       _,_,_,_,_,_,_,
       _,_,_,_,_,_,_,
-      _,_,_,X,_,_,_,
-      _,_,X,X,X,_,_,
-      _,_,_,X,_,_,_,
+      _,_,X,X,_,_,_,
+      _,_,X,_,X,_,_,
+      _,_,_,X,X,_,_,
       _,_,_,_,_,_,_,
       _,_,_,_,_,_,_,
     };
@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
       .ny = 5
     };
 
-    int back = 10;
+    int back = 15;
 
     f.cell = ansistor_field(f, back);
 
