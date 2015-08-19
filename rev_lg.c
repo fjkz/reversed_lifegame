@@ -91,21 +91,28 @@ void print_field(struct field f)
     printf("P1\n");
     printf("%d %d\n", nx, ny);
 
-    for (int j = 1; j <= ny; j++) {
-        for (int i = 1; i <= nx; i++) {
-            printf("%d ", f.cell[i + (nx + 2) * j]);
+    for (int j = 0; j < ny; j++) {
+        for (int i = 0; i < nx; i++) {
+            printf("%d ", f.cell[i + nx * j]);
         }
         printf("\n");
     }
 }
 
-static unsigned long count_called = 0;
+#define EDGE_O 0x0
+#define EDGE_E 0x1
+#define EDGE_W 0x2
+#define EDGE_S 0x4
+#define EDGE_N 0x8
+
+static unsigned long count_prev_cell = 0;
+static unsigned long count_prev_cell_for = 0;
 
 // Find previos cells recursively.
 static
 void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 {
-    count_called++;
+    count_prev_cell++;
 
     // Select candidates with the cell state.
     int *prev_cell9;
@@ -121,58 +128,169 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
     const int nx = f.nx;
     const int ny = f.ny;
-    const int dx = nx + 2;
-    const int pos_end = dx * (ny + 1) - 2;
+
+    //    --> x
+    //   |    __S__
+    //   v   |     |
+    //  y   E|  O  |W
+    //       |_____|
+    //          N
+    int edge = EDGE_O;
+
+    const int x = pos % nx;
+    if (x == 0)
+        edge |= EDGE_E;
+    else if (x == nx - 1)
+        edge |= EDGE_W;
+
+    const int y = pos / nx;
+    if (y == 0)
+        edge |= EDGE_S;
+    else if (y == ny - 1)
+        edge |= EDGE_N;
+
 
     // Get the 3x3 cells to be search at this turn.
-    int non_empty;
-    int alive;
-    {
-        int c0 =  p_cell[pos - 1 - dx];
-        int c1 =  p_cell[pos     - dx];
-        int c2 =  p_cell[pos + 1 - dx];
-        int c3 =  p_cell[pos - 1     ];
-        int c4 =  p_cell[pos         ];
-        int c5 =  p_cell[pos + 1     ];
-        int c6 =  p_cell[pos - 1 + dx];
-        int c7 =  p_cell[pos     + dx];
-        int c8 =  p_cell[pos + 1 + dx];
+    int c0, c1, c2,
+        c3, c4, c5,
+        c6, c7, c8;
+    // The boundaries are dead.
+    switch (edge) {
+    case EDGE_S | EDGE_E:
+        c0 = DEAD;
+        c1 = DEAD;
+        c2 = DEAD;
+        c3 = DEAD;
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = DEAD;
+        c7 = p_cell[pos     + nx];
+        c8 = p_cell[pos + 1 + nx];
+    break;
 
-        // The 0 1, 2, 3, 6 th is not empty clearly.
-        int empty = (c4 & 2) << 3 |
-                    (c5 & 2) << 4 |
-                    (c7 & 2) << 6 |
-                    (c8 & 2) << 7;
+    case EDGE_S:
+        c0 = DEAD;
+        c1 = DEAD;
+        c2 = DEAD;
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = p_cell[pos - 1 + nx];
+        c7 = p_cell[pos     + nx];
+        c8 = p_cell[pos + 1 + nx];
+    break;
 
-        non_empty = ~empty;
+    case EDGE_S | EDGE_W:
+        c0 = DEAD;
+        c1 = DEAD;
+        c2 = DEAD;
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = DEAD;
+        c6 = p_cell[pos - 1 + nx];
+        c7 = p_cell[pos     + nx];
+        c8 = DEAD;
+    break;
 
-        alive = (c0 & 1)      |
-                (c1 & 1) << 1 |
-                (c2 & 1) << 2 |
-                (c3 & 1) << 3 |
-                (c4 & 1) << 4 |
-                (c5 & 1) << 5 |
-                (c6 & 1) << 6 |
-                (c7 & 1) << 7 |
-                (c8 & 1) << 8;
+    case EDGE_E:
+        c0 = DEAD;
+        c1 = p_cell[pos     - nx];
+        c2 = p_cell[pos + 1 - nx];
+        c3 = DEAD;
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = DEAD;
+        c7 = p_cell[pos     + nx];
+        c8 = p_cell[pos + 1 + nx];
+    break;
+
+    case EDGE_W:
+        c0 = p_cell[pos - 1 - nx];
+        c1 = p_cell[pos     - nx];
+        c2 = DEAD;
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = DEAD;
+        c6 = p_cell[pos - 1 + nx];
+        c7 = p_cell[pos     + nx];
+        c8 = DEAD;
+    break;
+
+    case EDGE_N | EDGE_E:
+        c0 = DEAD;
+        c1 = p_cell[pos     - nx];
+        c2 = p_cell[pos + 1 - nx];
+        c3 = DEAD;
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = DEAD;
+        c7 = DEAD;
+        c8 = DEAD;
+    break;
+
+    case EDGE_N:
+        c0 = p_cell[pos - 1 - nx];
+        c1 = p_cell[pos     - nx];
+        c2 = p_cell[pos + 1 - nx];
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = DEAD;
+        c7 = DEAD;
+        c8 = DEAD;
+    break;
+
+    case EDGE_N | EDGE_W:
+        c0 = p_cell[pos - 1 - nx];
+        c1 = p_cell[pos     - nx];
+        c2 = DEAD;
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = DEAD;
+        c6 = DEAD;
+        c7 = DEAD;
+        c8 = DEAD;
+    break;
+
+    default:
+        c0 = p_cell[pos - 1 - nx];
+        c1 = p_cell[pos     - nx];
+        c2 = p_cell[pos + 1 - nx];
+        c3 = p_cell[pos - 1     ];
+        c4 = p_cell[pos         ];
+        c5 = p_cell[pos + 1     ];
+        c6 = p_cell[pos - 1 + nx];
+        c7 = p_cell[pos     + nx];
+        c8 = p_cell[pos + 1 + nx];
+    break;
     }
 
-    // The next cell position to be searched.
-    int next_pos;
-    if (pos % dx == nx) {
-        next_pos = pos + 3; // avoid edge
-    } else {
-        next_pos = pos + 1;
-    }
+    // The 0 1, 2, 3, 6 th is not empty clearly.
+    const int empty = (c4 & 2) << 3 |
+                      (c5 & 2) << 4 |
+                      (c7 & 2) << 6 |
+                      (c8 & 2) << 7;
+
+    const int non_empty = ~empty;
+
+    const int alive = (c0 & 1)      |
+                      (c1 & 1) << 1 |
+                      (c2 & 1) << 2 |
+                      (c3 & 1) << 3 |
+                      (c4 & 1) << 4 |
+                      (c5 & 1) << 5 |
+                      (c6 & 1) << 6 |
+                      (c7 & 1) << 7 |
+                      (c8 & 1) << 8;
 
     // Copy of the previous field candidate.
     // If domain size is larger, stack may overflow.
     // If so, revert only overwritten cells manulally.
-    char p_cell_cpy[dx * (ny + 2)];
-    const int size_cell = sizeof(char) * dx * (ny + 2);
+    char p_cell_cpy[nx * ny];
+    const int size_cell = sizeof(char) * nx * ny;
     memcpy(p_cell_cpy, p_cell, size_cell);
 
-    // For all 3x3 cells pattern
+    // For all 3x3 cells pattern // TODO: hack not select, build 
     // whose center cell becomes the given field state.
     //
     // Search from leaner patterns
@@ -188,23 +306,36 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
             continue;
         }
 
-        // Overwrites the field with the given 3x3 cells pattern.
-        // Does not write 0 1, 2, 3, 6 th cells
-        // because they have already been written.
-        p_cell[pos         ] = (cell9 >> 4) & 1; // only at x = 1, y = 1
-        p_cell[pos + 1     ] = (cell9 >> 5) & 1; // only at y = 1
-        p_cell[pos     + dx] = (cell9 >> 7) & 1; // only at x = 1
-        p_cell[pos + 1 + dx] = (cell9 >> 8) & 1;
-
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
-        if (pos == pos_end) {
+        if (pos == nx * ny - 1) {
+            count_prev_cell_for += i - progress[pos] + 1;
             progress[pos] = i + 1;
             return;
         }
 
+        // Overwrites the field with the given 3x3 cells pattern.
+        // Does not write 0 1, 2, 3, 6 th cells
+        // because they have already been written.
+
+        // only x = 0 and y = 0
+        if (edge & EDGE_S && edge & EDGE_E)
+            p_cell[pos         ] = (cell9 >> 4) & 1;
+
+        // only y = 0 and not x = nx - 1
+        if (edge & EDGE_S && ~edge & EDGE_W)
+            p_cell[pos + 1     ] = (cell9 >> 5) & 1;
+
+        // only x = 0 and not y = ny - 1
+        if (edge & EDGE_E && ~edge & EDGE_N)
+            p_cell[pos     + nx] = (cell9 >> 7) & 1;
+
+        // only not x = nx - 1 and not y = ny - 1
+        if (~edge & EDGE_W && ~edge & EDGE_N)
+            p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
+
         // Find the previous pattern for the next cell.
-        _prev_cell(f, p_cell, next_pos, progress);
+        _prev_cell(f, p_cell, pos + 1, progress);
 
         // No pattern found. Try with the next candidate.
         if (p_cell[0] & NORESULT) {
@@ -215,6 +346,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
         // A suitable pattern was found.
         // Search from the this candidate at the next call.
+        count_prev_cell_for += i - progress[pos] + 1;
         progress[pos] = i;
         return;
     }
@@ -222,6 +354,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     // All candidate is not suitable.
     // Search from the first candidate at the next call
     // because the candidate of the previous position is changed.
+    count_prev_cell_for += num_cand - progress[pos];
     progress[pos] = 0;
     p_cell[0] |= NORESULT;
     return;
@@ -231,29 +364,30 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 // the given field pattern at the next step.
 char *prev_cell(struct field f, int *progress)
 {
-    int nx = f.nx;
-    int ny = f.ny;
-
+    int l = f.nx * f.ny;
     // Edges are DEAD
-    char *p_cell = (char *)calloc(sizeof(char), (nx + 2) * (ny + 2));
+    char *p_cell = (char *)calloc(sizeof(char), l);
 
-    for (int j = 1; j <= ny; j++)
-        for (int i = 1; i <= nx; i++) {
-            p_cell[i + (nx + 2) * j] = EMPTY;
-        }
+    for (int i = 0; i < l; i++) {
+        p_cell[i] = EMPTY;
+    }
 
-    _prev_cell(f, p_cell, /* pos = */ nx + 3 , progress);
+    _prev_cell(f, p_cell, /* pos = */ 0 , progress);
 
     return p_cell[0] & NORESULT ? NULL : p_cell;
 }
 
+unsigned long count_ansistor_field = 0;
+
 // TODO: multi thead.
 char *ansistor_field(struct field f, int back)
 {
+    count_ansistor_field++;
+
     fprintf(stderr, "#");
 
     // Count the progress of searching.
-    int l = (f.nx + 2) * (f.ny + 2);
+    int l = f.nx * f.ny;
     int progress[l];
     for (int i = 0; i < l; i++) {
         progress[i] = 0;
@@ -298,13 +432,11 @@ int main(int argc, char *argv[])
     char X = ALIVE;
 
     char cell[] = {
-      _,_,_,_,_,_,_,
-      _,_,_,_,_,_,_,
-      _,_,X,X,_,_,_,
-      _,_,X,_,X,_,_,
-      _,_,_,X,X,_,_,
-      _,_,_,_,_,_,_,
-      _,_,_,_,_,_,_,
+      _,_,_,_,_,
+      _,X,X,_,_,
+      _,X,_,X,_,
+      _,_,X,X,_,
+      _,_,_,_,_,
     };
 
     struct field f = {
@@ -324,7 +456,12 @@ int main(int argc, char *argv[])
 
     print_field(f);
 
-    fprintf(stderr, "<_prev_field> is called %lu times.\n", count_called);
+    fprintf(stderr, "<ansistor_field> is called %lu times. \n",
+            count_ansistor_field);
+    fprintf(stderr, "<_prev_cell> is called %lu times.\n",
+            count_prev_cell);
+    fprintf(stderr, "<_prev_cell> for-loop is called %lu times.\n",
+            count_prev_cell_for);
 
     return 0;
 }
