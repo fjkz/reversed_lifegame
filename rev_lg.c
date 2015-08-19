@@ -202,33 +202,37 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
             continue;
         }
 
+        switch (edge) {
         // The search is succeed if all the cells are covered.
         // Search from the next candidate at the next call.
-        if (pos == nx * ny - 1) {
+        case EDGE_N | EDGE_W:
             count_prev_cell_for += i - progress[pos] + 1;
             progress[pos] = i + 1;
             return;
-        }
 
         // Overwrites the field with the given 3x3 cells pattern.
-        // Does not write 0 1, 2, 3, 6 th cells
-        // because they have already been written.
-
-        // only x = 0 and y = 0
-        if (edge & EDGE_S && edge & EDGE_E)
+        // Write to only empty cells.
+        case EDGE_S | EDGE_E:
             p_cell[pos         ] = (cell9 >> 4) & 1;
-
-        // only y = 0 and not x = nx - 1
-        if (edge & EDGE_S && ~edge & EDGE_W)
             p_cell[pos + 1     ] = (cell9 >> 5) & 1;
-
-        // only x = 0 and not y = ny - 1
-        if (edge & EDGE_E && ~edge & EDGE_N)
             p_cell[pos     + nx] = (cell9 >> 7) & 1;
-
-        // only not x = nx - 1 and not y = ny - 1
-        if (~edge & EDGE_W && ~edge & EDGE_N)
             p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
+            break;
+
+        case EDGE_S:
+            p_cell[pos + 1     ] = (cell9 >> 5) & 1;
+            p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
+            break;
+
+        case EDGE_E:
+            p_cell[pos     + nx] = (cell9 >> 7) & 1;
+            p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
+            break;
+
+        case EDGE_O:
+            p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
+            break;
+        }
 
         // Find the previous pattern for the next cell.
         _prev_cell(f, p_cell, pos + 1, progress);
@@ -261,7 +265,6 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 char *prev_cell(struct field f, int *progress)
 {
     int l = f.nx * f.ny;
-    // Edges are DEAD
     char *p_cell = (char *)calloc(sizeof(char), l);
 
     for (int i = 0; i < l; i++) {
