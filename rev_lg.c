@@ -7,8 +7,11 @@
 #define NUM_CANDIDATES_CELL9_DEAD  372 // 2^9 - 136
 
 // List of the previous 3x3 cells paterns for each center cell state.
-static int *prev_cell9_alive;
-static int *prev_cell9_dead;
+static int prev_cell9_alive[NUM_CANDIDATES_CELL9_ALIVE];
+static int prev_cell9_dead[NUM_CANDIDATES_CELL9_DEAD];
+
+// The next state of the center cell for each 3x3 cell.
+static char next_cell[512];
 
 static int pop(int x)
 {
@@ -30,13 +33,6 @@ static int comp_pop(const void *a, const void *b)
 // Initialize 3x3 cell paterns.
 void initialize()
 {
-    // Memory allocation for 2D array.
-    prev_cell9_alive = (int *) malloc(
-            sizeof(int) * NUM_CANDIDATES_CELL9_ALIVE);
-
-    prev_cell9_dead = (int *) malloc(
-            sizeof(int) * NUM_CANDIDATES_CELL9_DEAD);
-
     // Counters for each state of the center cell.
     int na = 0;
     int nd = 0;
@@ -55,8 +51,8 @@ void initialize()
         int sum = pop(integers[i]);
 
         // The next cell is alive.
-        if (sum == 3 || (sum == 4 &&
-                         (x >> 4) & 1)) { // bit of the center cell.
+        if (sum == 3 ||
+            (sum == 4 && x & 0x10)) { // bit of the center cell.
             prev_cell9_alive[na] = x;
             na++;
 
@@ -69,8 +65,23 @@ void initialize()
 
     assert(na == NUM_CANDIDATES_CELL9_ALIVE);
     assert(nd == NUM_CANDIDATES_CELL9_DEAD);
+
+    // Check next center cell state for each 3x3 cells.
+    for (int i = 0; i < 512; i++) {
+        int sum = pop(i);
+
+        if (sum == 3 ||
+            (sum == 4 && i & 0x10)) { // bit of the center cell.
+            next_cell[i] = 1;
+        } else {
+            next_cell[i] = 0;
+        }
+    }
 }
 
+// Cells are sorted as (x, y) =
+// (0, 0), (1, 0) ... (nx-1, 0) (0, 1) ... (nx-2, ny-1), (nx-1, ny-1)
+// cell[i] = 1 means alive, 0 meas dead.
 struct field {
     char *cell; // 1 means alive, 0 means dead.
     int nx;
@@ -107,13 +118,16 @@ static unsigned long count_prev_cell_for = 0;
 static
 int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 {
+//    printf("p=%d\n", pos);
     count_prev_cell++;
+
+    char target = f.cell[pos];
 
     // Select candidates with the cell state.
     int *prev_cell9;
     int num_cand;
 
-    if (f.cell[pos]) {
+    if (target) {
         prev_cell9 = prev_cell9_alive;
         num_cand = NUM_CANDIDATES_CELL9_ALIVE;
     } else {
@@ -148,6 +162,12 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
     // Get the 3x3 cells to be search at this turn.
     // The boundaries are dead.
+    //
+    //   --> x
+    // | 0 1 2
+    // v 3 4 5
+    // y 6 7 8
+    //
     int c0 = edge & (EDGE_S | EDGE_E) ? 0 : p_cell[pos - 1 - nx];
     int c1 = edge & EDGE_S            ? 0 : p_cell[pos     - nx];
     int c2 = edge & (EDGE_S | EDGE_W) ? 0 : p_cell[pos + 1 - nx];
@@ -189,11 +209,26 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
                     1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
         break;
 
+    case EDGE_N | EDGE_W:
+        if (next_cell[alive] == target) {
+            // The last position restart from.
+            progress[nx * (ny - 1) - 1]++;
+            return 0;
+        } else {
+            return 1;
+        }
+
     default:
-        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
-                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
-                    1 << 6 | 1 << 7 | 1 << 8;  // 1 1 1
-        break;
+        if (next_cell[alive] == target) {
+            if (progress[pos] > 0) {
+                progress[pos] = 0;
+                return 1;
+            }
+            return _prev_cell(f, p_cell, pos + 1, progress);
+        } else {
+            progress[pos] = 0;
+            return 1;
+        }
     }
 
     // For all 3x3 cells pattern // TODO: hack not select, build 
@@ -309,7 +344,7 @@ char *ansistor_field(struct field f, int back)
         // No suitable pattern.
         if (p_cell == NULL) {
             fprintf(stderr, "\b");
-            return p_cell;
+            return NULL;
         }
 
         if (back == 1) {
