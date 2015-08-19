@@ -71,10 +71,8 @@ void initialize()
     assert(nd == NUM_CANDIDATES_CELL9_DEAD);
 }
 
-#define DEAD     0x0
-#define ALIVE    0x1
-#define EMPTY    0x2
-#define NORESULT 0x4
+#define DEAD  0
+#define ALIVE 1
 
 struct field {
     char *cell; // Includes edge. Edge cells are dead.
@@ -110,7 +108,7 @@ static unsigned long count_prev_cell_for = 0;
 
 // Find previos cells recursively.
 static
-void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
+int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 {
     count_prev_cell++;
 
@@ -227,7 +225,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         case EDGE_N | EDGE_W:
             count_prev_cell_for += i - progress[pos] + 1;
             progress[pos] = i + 1;
-            return;
+            return 0;
 
         // Overwrites the field with the given 3x3 cells pattern.
         // Write to only empty cells.
@@ -254,12 +252,11 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         }
 
         // Find the previous pattern for the next cell.
-        _prev_cell(f, p_cell, pos + 1, progress);
+        int ret = _prev_cell(f, p_cell, pos + 1, progress);
 
         // No pattern found. Try with the next candidate.
         // Does not need to revert p_cell because check only non-empty cells.
-        if (p_cell[0] & NORESULT) {
-            p_cell[0] ^= NORESULT;
+        if (ret) {
             continue;
         }
 
@@ -267,7 +264,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         // Search from the this candidate at the next call.
         count_prev_cell_for += i - progress[pos] + 1;
         progress[pos] = i;
-        return;
+        return 0;
     }
 
     // All candidate is not suitable.
@@ -275,8 +272,7 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     // because the candidate of the previous position is changed.
     count_prev_cell_for += num_cand - progress[pos];
     progress[pos] = 0;
-    p_cell[0] |= NORESULT;
-    return;
+    return 1;
 }
 
 // Get a field pattern that becomes to
@@ -286,9 +282,9 @@ char *prev_cell(struct field f, int *progress)
     // Faster than malloc ?
     char *p_cell = (char *) calloc(sizeof(char), f.nx * f.ny);
 
-    _prev_cell(f, p_cell, /* pos = */ 0 , progress);
+    int ret = _prev_cell(f, p_cell, /* pos = */ 0 , progress);
 
-    if (p_cell[0] & NORESULT) {
+    if (ret) {
         free(p_cell);
         return NULL;
     } else {
