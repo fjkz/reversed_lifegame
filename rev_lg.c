@@ -71,13 +71,10 @@ void initialize()
     assert(nd == NUM_CANDIDATES_CELL9_DEAD);
 }
 
-#define DEAD  0
-#define ALIVE 1
-
 struct field {
-    char *cell; // Includes edge. Edge cells are dead.
-    int nx;     // Not includes edge.
-    int ny;     // Not includes edge.
+    char *cell; // 1 means alive, 0 means dead.
+    int nx;
+    int ny;
 };
 
 // Print field with PBM format.
@@ -116,7 +113,7 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     int *prev_cell9;
     int num_cand;
 
-    if (f.cell[pos] == ALIVE) {
+    if (f.cell[pos]) {
         prev_cell9 = prev_cell9_alive;
         num_cand = NUM_CANDIDATES_CELL9_ALIVE;
     } else {
@@ -127,6 +124,8 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     const int nx = f.nx;
     const int ny = f.ny;
 
+    // Check which edge "pos" is on.
+    //
     //    --> x
     //   |    __S__
     //   v   |     |
@@ -149,25 +148,19 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
     // Get the 3x3 cells to be search at this turn.
     // The boundaries are dead.
-    int c0 = edge & (EDGE_S | EDGE_E) ? DEAD : p_cell[pos - 1 - nx];
-    int c1 = edge & EDGE_S            ? DEAD : p_cell[pos     - nx];
-    int c2 = edge & (EDGE_S | EDGE_W) ? DEAD : p_cell[pos + 1 - nx];
-    int c3 = edge & EDGE_E            ? DEAD : p_cell[pos - 1     ];
-    int c4 =                                   p_cell[pos         ];
-    int c5 = edge & EDGE_W            ? DEAD : p_cell[pos + 1     ];
-    int c6 = edge & (EDGE_N | EDGE_E) ? DEAD : p_cell[pos - 1 + nx];
-    int c7 = edge & EDGE_N            ? DEAD : p_cell[pos     + nx];
-    int c8 = edge & (EDGE_N | EDGE_W) ? DEAD : p_cell[pos + 1 + nx];
+    int c0 = edge & (EDGE_S | EDGE_E) ? 0 : p_cell[pos - 1 - nx];
+    int c1 = edge & EDGE_S            ? 0 : p_cell[pos     - nx];
+    int c2 = edge & (EDGE_S | EDGE_W) ? 0 : p_cell[pos + 1 - nx];
+    int c3 = edge & EDGE_E            ? 0 : p_cell[pos - 1     ];
+    int c4 =                                p_cell[pos         ];
+    int c5 = edge & EDGE_W            ? 0 : p_cell[pos + 1     ];
+    int c6 = edge & (EDGE_N | EDGE_E) ? 0 : p_cell[pos - 1 + nx];
+    int c7 = edge & EDGE_N            ? 0 : p_cell[pos     + nx];
+    int c8 = edge & (EDGE_N | EDGE_W) ? 0 : p_cell[pos + 1 + nx];
 
-    int alive = (c0 & 1) << 0 |
-                (c1 & 1) << 1 |
-                (c2 & 1) << 2 |
-                (c3 & 1) << 3 |
-                (c4 & 1) << 4 |
-                (c5 & 1) << 5 |
-                (c6 & 1) << 6 |
-                (c7 & 1) << 7 |
-                (c8 & 1) << 8;
+    int alive = c0 << 0 | c1 << 1 | c2 << 2 |
+                c3 << 3 | c4 << 4 | c5 << 5 |
+                c6 << 6 | c7 << 7 | c8 << 8;
 
     // Cells written in the previous turns.
     int non_empty;
@@ -343,8 +336,8 @@ int main(int argc, char *argv[])
 {
     initialize();
 
-    char _ = DEAD;
-    char X = ALIVE;
+    char _ = 0;
+    char X = 1;
 
     char cell[] = {
       _,_,_,_,_,
