@@ -149,121 +149,17 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     else if (y == ny - 1)
         edge |= EDGE_N;
 
-
     // Get the 3x3 cells to be search at this turn.
-    int c0, c1, c2,
-        c3, c4, c5,
-        c6, c7, c8;
     // The boundaries are dead.
-    switch (edge) {
-    case EDGE_S | EDGE_E:
-        c0 = DEAD;
-        c1 = DEAD;
-        c2 = DEAD;
-        c3 = DEAD;
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = DEAD;
-        c7 = p_cell[pos     + nx];
-        c8 = p_cell[pos + 1 + nx];
-    break;
-
-    case EDGE_S:
-        c0 = DEAD;
-        c1 = DEAD;
-        c2 = DEAD;
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = p_cell[pos - 1 + nx];
-        c7 = p_cell[pos     + nx];
-        c8 = p_cell[pos + 1 + nx];
-    break;
-
-    case EDGE_S | EDGE_W:
-        c0 = DEAD;
-        c1 = DEAD;
-        c2 = DEAD;
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = DEAD;
-        c6 = p_cell[pos - 1 + nx];
-        c7 = p_cell[pos     + nx];
-        c8 = DEAD;
-    break;
-
-    case EDGE_E:
-        c0 = DEAD;
-        c1 = p_cell[pos     - nx];
-        c2 = p_cell[pos + 1 - nx];
-        c3 = DEAD;
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = DEAD;
-        c7 = p_cell[pos     + nx];
-        c8 = p_cell[pos + 1 + nx];
-    break;
-
-    case EDGE_W:
-        c0 = p_cell[pos - 1 - nx];
-        c1 = p_cell[pos     - nx];
-        c2 = DEAD;
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = DEAD;
-        c6 = p_cell[pos - 1 + nx];
-        c7 = p_cell[pos     + nx];
-        c8 = DEAD;
-    break;
-
-    case EDGE_N | EDGE_E:
-        c0 = DEAD;
-        c1 = p_cell[pos     - nx];
-        c2 = p_cell[pos + 1 - nx];
-        c3 = DEAD;
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = DEAD;
-        c7 = DEAD;
-        c8 = DEAD;
-    break;
-
-    case EDGE_N:
-        c0 = p_cell[pos - 1 - nx];
-        c1 = p_cell[pos     - nx];
-        c2 = p_cell[pos + 1 - nx];
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = DEAD;
-        c7 = DEAD;
-        c8 = DEAD;
-    break;
-
-    case EDGE_N | EDGE_W:
-        c0 = p_cell[pos - 1 - nx];
-        c1 = p_cell[pos     - nx];
-        c2 = DEAD;
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = DEAD;
-        c6 = DEAD;
-        c7 = DEAD;
-        c8 = DEAD;
-    break;
-
-    default:
-        c0 = p_cell[pos - 1 - nx];
-        c1 = p_cell[pos     - nx];
-        c2 = p_cell[pos + 1 - nx];
-        c3 = p_cell[pos - 1     ];
-        c4 = p_cell[pos         ];
-        c5 = p_cell[pos + 1     ];
-        c6 = p_cell[pos - 1 + nx];
-        c7 = p_cell[pos     + nx];
-        c8 = p_cell[pos + 1 + nx];
-    break;
-    }
+    int c0 = edge & (EDGE_S | EDGE_E) ? DEAD : p_cell[pos - 1 - nx];
+    int c1 = edge & EDGE_S            ? DEAD : p_cell[pos     - nx];
+    int c2 = edge & (EDGE_S | EDGE_W) ? DEAD : p_cell[pos + 1 - nx];
+    int c3 = edge & EDGE_E            ? DEAD : p_cell[pos - 1     ];
+    int c4 =                                   p_cell[pos         ];
+    int c5 = edge & EDGE_W            ? DEAD : p_cell[pos + 1     ];
+    int c6 = edge & (EDGE_N | EDGE_E) ? DEAD : p_cell[pos - 1 + nx];
+    int c7 = edge & EDGE_N            ? DEAD : p_cell[pos     + nx];
+    int c8 = edge & (EDGE_N | EDGE_W) ? DEAD : p_cell[pos + 1 + nx];
 
     // The 0 1, 2, 3, 6 th is not empty clearly.
     const int empty = (c4 & 2) << 3 |
