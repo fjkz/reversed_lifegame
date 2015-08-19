@@ -161,30 +161,49 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
     int c7 = edge & EDGE_N            ? DEAD : p_cell[pos     + nx];
     int c8 = edge & (EDGE_N | EDGE_W) ? DEAD : p_cell[pos + 1 + nx];
 
-    // The 0 1, 2, 3, 6 th is not empty clearly.
-    const int empty = (c4 & 2) << 3 |
-                      (c5 & 2) << 4 |
-                      (c7 & 2) << 6 |
-                      (c8 & 2) << 7;
+    int alive = (c0 & 1) << 0 |
+                (c1 & 1) << 1 |
+                (c2 & 1) << 2 |
+                (c3 & 1) << 3 |
+                (c4 & 1) << 4 |
+                (c5 & 1) << 5 |
+                (c6 & 1) << 6 |
+                (c7 & 1) << 7 |
+                (c8 & 1) << 8;
 
-    const int non_empty = ~empty;
+    // Cells written in the previous turns.
+    int non_empty;
+    switch (edge) {
+    case EDGE_S | EDGE_E:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 0 << 4 | 0 << 5 | // 1 0 0
+                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
+        break;
 
-    const int alive = (c0 & 1)      |
-                      (c1 & 1) << 1 |
-                      (c2 & 1) << 2 |
-                      (c3 & 1) << 3 |
-                      (c4 & 1) << 4 |
-                      (c5 & 1) << 5 |
-                      (c6 & 1) << 6 |
-                      (c7 & 1) << 7 |
-                      (c8 & 1) << 8;
+    case EDGE_S:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 0 << 5 | // 1 1 0
+                    1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
+        break;
 
-    // Copy of the previous field candidate.
-    // If domain size is larger, stack may overflow.
-    // If so, revert only overwritten cells manulally.
-    char p_cell_cpy[nx * ny];
-    const int size_cell = sizeof(char) * nx * ny;
-    memcpy(p_cell_cpy, p_cell, size_cell);
+    case EDGE_E:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
+                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
+        break;
+
+    case EDGE_O:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
+                    1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
+        break;
+
+    default:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
+                    1 << 6 | 1 << 7 | 1 << 8;  // 1 1 1
+        break;
+    }
 
     // For all 3x3 cells pattern // TODO: hack not select, build 
     // whose center cell becomes the given field state.
@@ -238,9 +257,9 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         _prev_cell(f, p_cell, pos + 1, progress);
 
         // No pattern found. Try with the next candidate.
+        // Does not need to revert p_cell because check only non-empty cells.
         if (p_cell[0] & NORESULT) {
-            // Revert p_cell
-            memcpy(p_cell, p_cell_cpy, size_cell);
+            p_cell[0] ^= NORESULT;
             continue;
         }
 
@@ -264,16 +283,17 @@ void _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 // the given field pattern at the next step.
 char *prev_cell(struct field f, int *progress)
 {
-    int l = f.nx * f.ny;
-    char *p_cell = (char *)calloc(sizeof(char), l);
-
-    for (int i = 0; i < l; i++) {
-        p_cell[i] = EMPTY;
-    }
+    // Faster than malloc ?
+    char *p_cell = (char *) calloc(sizeof(char), f.nx * f.ny);
 
     _prev_cell(f, p_cell, /* pos = */ 0 , progress);
 
-    return p_cell[0] & NORESULT ? NULL : p_cell;
+    if (p_cell[0] & NORESULT) {
+        free(p_cell);
+        return NULL;
+    } else {
+        return p_cell;
+    }
 }
 
 unsigned long count_ansistor_field = 0;
@@ -348,19 +368,20 @@ int main(int argc, char *argv[])
 
     f.cell = ansistor_field(f, back);
 
-    if (f.cell == NULL) {
-        fprintf(stderr, "No previous field pattern was found.\n");
-        return 1;
-    }
-
-    print_field(f);
-
+    // Print statistics.
     fprintf(stderr, "<ansistor_field> is called %lu times. \n",
             count_ansistor_field);
     fprintf(stderr, "<_prev_cell> is called %lu times.\n",
             count_prev_cell);
     fprintf(stderr, "<_prev_cell> for-loop is called %lu times.\n",
             count_prev_cell_for);
+
+    if (f.cell == NULL) {
+        fprintf(stderr, "No previous field pattern was found.\n");
+        return 1;
+    }
+
+    print_field(f);
 
     return 0;
 }
