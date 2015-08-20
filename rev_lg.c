@@ -118,7 +118,6 @@ static unsigned long count_prev_cell_for = 0;
 static
 int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 {
-//    printf("p=%d\n", pos);
     count_prev_cell++;
 
     char target = f.cell[pos];
@@ -207,11 +206,44 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
                     1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
                     1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
-        break;
+        alive &= non_empty;
+        switch (progress[pos]) {
+        int cell9;
+        // The empty cell is dead
+        case 0:
+            cell9 = alive | (0 << 8);
+            if (next_cell[cell9] == target) {
+                p_cell[pos + 1 + nx] = 0;
+                int ret = _prev_cell(f, p_cell, pos + 1, progress);
+                if (!ret) {
+                    // Success. Restart from this case.
+                    return 0;
+                }
+            }
+            // Fail. Try case 1.
+
+        // The empty cell is alive.
+        case 1:
+            cell9 = alive | (1 << 8);
+            if (next_cell[cell9] == target) {
+                p_cell[pos + 1 + nx] = 1;
+                int ret = _prev_cell(f, p_cell, pos + 1, progress);
+                if (!ret) {
+                    // Success. Restart from this case.
+                    progress[pos] = 1;
+                    return 0;
+                }
+            }
+
+            // All cases are not suitable.
+            progress[pos] = 0;
+            return 1;
+        }
 
     case EDGE_N | EDGE_W:
         if (next_cell[alive] == target) {
-            // The last position restart from.
+            // The search is succeed if all the cells are covered.
+            // The next search restarts from the next candidate.
             progress[nx * (ny - 1) - 1]++;
             return 0;
         } else {
@@ -248,13 +280,6 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         }
 
         switch (edge) {
-        // The search is succeed if all the cells are covered.
-        // Search from the next candidate at the next call.
-        case EDGE_N | EDGE_W:
-            count_prev_cell_for += i - progress[pos] + 1;
-            progress[pos] = i + 1;
-            return 0;
-
         // Overwrites the field with the given 3x3 cells pattern.
         // Write to only empty cells.
         case EDGE_S | EDGE_E:
@@ -271,10 +296,6 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 
         case EDGE_E:
             p_cell[pos     + nx] = (cell9 >> 7) & 1;
-            p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
-            break;
-
-        case EDGE_O:
             p_cell[pos + 1 + nx] = (cell9 >> 8) & 1;
             break;
         }
