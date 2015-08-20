@@ -3,13 +3,6 @@
 #include <string.h>
 #include <assert.h>
 
-#define NUM_CANDIDATES_CELL9_ALIVE 140 // 9C3 + 8C3
-#define NUM_CANDIDATES_CELL9_DEAD  372 // 2^9 - 136
-
-// List of the previous 3x3 cells paterns for each center cell state.
-static int prev_cell9_alive[NUM_CANDIDATES_CELL9_ALIVE];
-static int prev_cell9_dead[NUM_CANDIDATES_CELL9_DEAD];
-
 // The next state of the center cell for each 3x3 cell.
 static char next_cell[512];
 
@@ -23,49 +16,9 @@ static int pop(int x)
     return x & 0x0000003F;
 }
 
-static int comp_pop(const void *a, const void *b)
-{
-    int i = *(int *)a;
-    int j = *(int *)b;
-    return pop(i) - pop(j); 
-}
-
 // Initialize 3x3 cell paterns.
 void initialize()
 {
-    // Counters for each state of the center cell.
-    int na = 0;
-    int nd = 0;
-
-    int integers[512]; /* 512 = 2^9 */
-    for (int i = 0; i < 512; i++) {
-        integers[i] = i;
-    }
-
-    // Sort with population counts.
-    qsort(integers, 512, sizeof(int), comp_pop);
-
-    // Check next center cell state for each 3x3 cells.
-    for (int i = 0; i < 512; i++) {
-        int x = integers[i];
-        int sum = pop(integers[i]);
-
-        // The next cell is alive.
-        if (sum == 3 ||
-            (sum == 4 && x & 0x10)) { // bit of the center cell.
-            prev_cell9_alive[na] = x;
-            na++;
-
-        // The next cell is dead.
-        } else {
-            prev_cell9_dead[nd] = x;
-            nd++;
-        }
-    }
-
-    assert(na == NUM_CANDIDATES_CELL9_ALIVE);
-    assert(nd == NUM_CANDIDATES_CELL9_DEAD);
-
     // Check next center cell state for each 3x3 cells.
     for (int i = 0; i < 512; i++) {
         int sum = pop(i);
@@ -120,19 +73,7 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
 {
     count_prev_cell++;
 
-    char target = f.cell[pos];
-
-    // Select candidates with the cell state.
-    int *prev_cell9;
-    int num_cand;
-
-    if (target) {
-        prev_cell9 = prev_cell9_alive;
-        num_cand = NUM_CANDIDATES_CELL9_ALIVE;
-    } else {
-        prev_cell9 = prev_cell9_dead;
-        num_cand = NUM_CANDIDATES_CELL9_DEAD;
-    }
+    const char target = f.cell[pos];
 
     const int nx = f.nx;
     const int ny = f.ny;
@@ -181,65 +122,49 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
                 c3 << 3 | c4 << 4 | c5 << 5 |
                 c6 << 6 | c7 << 7 | c8 << 8;
 
-    // Cells written in the previous turns.
-    int non_empty;
+    int cand[16];
+    int num_cand;
+
     switch (edge) {
-    case EDGE_S | EDGE_E:
-        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
-                    1 << 3 | 0 << 4 | 0 << 5 | // 1 0 0
-                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
-        break;
 
-    case EDGE_S:
-        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
-                    1 << 3 | 1 << 4 | 0 << 5 | // 1 1 0
-                    1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
-        break;
-
-    case EDGE_E:
-        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
-                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
-                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
-        alive &= non_empty;
-        for (int i = progress[pos]; i < 4; i++) {
-            int cell9 = alive | (i << 7);
-            if (next_cell[cell9] != target)
-                continue;
-
-            p_cell[pos     + nx] = (i >> 0) & 1;
-            p_cell[pos + 1 + nx] = (i >> 1) & 1;
-            
-            // Find the previous pattern for the next cell.
-            int ret = _prev_cell(f, p_cell, pos + 1, progress);
-
-            // No pattern found. Try with the next candidate.
-            // Does not need to revert p_cell
-            // because check only non-empty cells.
-            if (ret) {
-                continue;
+    // On EDGE_N or EDGE_W cells are filled.
+    // Check the existing 3x3 cells are suitable.
+    default: // EDGE_N or EDGE_W
+        if (next_cell[alive] == target) {
+            if (progress[pos] > 0) {
+                progress[pos] = 0;
+                return 1;
             }
-
-            // A suitable pattern was found.
-            // Search from the this candidate at the next call.
-            count_prev_cell_for += i - progress[pos] + 1;
-            progress[pos] = i;
-            return 0;
+            return _prev_cell(f, p_cell, pos + 1, progress);
+        } else {
+            progress[pos] = 0;
+            return 1;
         }
 
-        // All candidate is not suitable.
-        // Search from the first candidate at the next call
-        // because the candidate of the previous position is changed.
-        count_prev_cell_for += num_cand - progress[pos];
-        progress[pos] = 0;
-        return 1;
+    case EDGE_N | EDGE_W:
+        if (next_cell[alive] == target) {
+            // The search is succeed if all the cells are covered.
+            // The next search restarts from the next candidate.
+            progress[nx * (ny - 1) - 1]++;
+            return 0;
+        } else {
+            return 1;
+        }
 
+    // Cells written in the previous turns.
+    int non_empty;
+
+    // Extract for-loop because this case is the most frequent
+    // and the number of candidate is few.
     case EDGE_O:
         non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
                     1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
                     1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
         alive &= non_empty;
+
         switch (progress[pos]) {
         int cell9;
+
         // The empty cell is dead
         case 0:
             cell9 = alive | (0 << 8);
@@ -271,42 +196,49 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
             return 1;
         }
 
-    case EDGE_N | EDGE_W:
-        if (next_cell[alive] == target) {
-            // The search is succeed if all the cells are covered.
-            // The next search restarts from the next candidate.
-            progress[nx * (ny - 1) - 1]++;
-            return 0;
-        } else {
-            return 1;
-        }
+    // In the cases of EDGE_S or EDGE_E, set "num_and" and "cand[i]".
+    // Search about the candidates in the next for-loop.
+    case EDGE_S | EDGE_E:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 0 << 4 | 0 << 5 | // 1 0 0
+                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
+        alive &= non_empty;
+        num_cand = 16;
+        for (int i = 0; i < 16; i++)
+            cand[i] = (i & 0x3) << 4 | (i & 0xC) << 5;
+        break;
 
-    default: // EDGE_N or EDGE_W
-        if (next_cell[alive] == target) {
-            if (progress[pos] > 0) {
-                progress[pos] = 0;
-                return 1;
-            }
-            return _prev_cell(f, p_cell, pos + 1, progress);
-        } else {
-            progress[pos] = 0;
-            return 1;
-        }
+    case EDGE_S:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 0 << 5 | // 1 1 0
+                    1 << 6 | 1 << 7 | 0 << 8;  // 1 1 0
+        alive &= non_empty;
+        num_cand = 4;
+        for (int i = 0; i < 4; i++)
+            cand[i] = (i & 0x1) << 5 | (i & 0x2) << 7;
+        break;
+
+    case EDGE_E:
+        non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
+                    1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
+                    1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
+        alive &= non_empty;
+        num_cand = 4;
+        for (int i = 0; i < 4; i++)
+            cand[i] = i << 7; 
+        break; 
     }
 
-    // For all 3x3 cells pattern // TODO: hack not select, build 
-    // whose center cell becomes the given field state.
-    //
-    // Search from leaner patterns
-    // because they appear more frequently.
+    // For all 3x3 cells pattern that is compatible
+    // with the cells written in previous turns.
     //
     // Restart from the remembered candidate.
     for (int i = progress[pos]; i < num_cand; i++) {
-        const int cell9 = prev_cell9[i];
+        const int cell9 = alive | cand[i];
 
-        // Check the canditate macthes with the existed cells.
-        if ((alive ^ cell9) & non_empty) {
-            // Not matched. Try the next candidate.
+        // Check the canditate is suitable.
+        if (next_cell[cell9] != target) {
+            // Not good. Try the next candidate.
             continue;
         }
 
