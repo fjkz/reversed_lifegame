@@ -200,7 +200,38 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
         non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
                     1 << 3 | 1 << 4 | 1 << 5 | // 1 1 1
                     1 << 6 | 0 << 7 | 0 << 8;  // 1 0 0
-        break;
+        alive &= non_empty;
+        for (int i = progress[pos]; i < 4; i++) {
+            int cell9 = alive | (i << 7);
+            if (next_cell[cell9] != target)
+                continue;
+
+            p_cell[pos     + nx] = (i >> 0) & 1;
+            p_cell[pos + 1 + nx] = (i >> 1) & 1;
+            
+            // Find the previous pattern for the next cell.
+            int ret = _prev_cell(f, p_cell, pos + 1, progress);
+
+            // No pattern found. Try with the next candidate.
+            // Does not need to revert p_cell
+            // because check only non-empty cells.
+            if (ret) {
+                continue;
+            }
+
+            // A suitable pattern was found.
+            // Search from the this candidate at the next call.
+            count_prev_cell_for += i - progress[pos] + 1;
+            progress[pos] = i;
+            return 0;
+        }
+
+        // All candidate is not suitable.
+        // Search from the first candidate at the next call
+        // because the candidate of the previous position is changed.
+        count_prev_cell_for += num_cand - progress[pos];
+        progress[pos] = 0;
+        return 1;
 
     case EDGE_O:
         non_empty = 1 << 0 | 1 << 1 | 1 << 2 | // 1 1 1
@@ -250,7 +281,7 @@ int _prev_cell(struct field f, char *p_cell, int pos, int *progress)
             return 1;
         }
 
-    default:
+    default: // EDGE_N or EDGE_W
         if (next_cell[alive] == target) {
             if (progress[pos] > 0) {
                 progress[pos] = 0;
